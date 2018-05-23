@@ -3,10 +3,6 @@
             [clojure.core.matrix.operators :as M])
   (:gen-class))
 
-(defn sigmoid
-  [x]
-  (m/logistic x))
-
 (defn sum-rows
   [mat]
   (map (partial apply +)
@@ -25,7 +21,7 @@
     (->> mat
          m/rows
          (map (partial apply +))
-         (m/emul (/ 1 m)))))
+         (M/* (/ 1 m)))))
 
 (defn init-params
   "Returns initial values for W and b, given the number of dimensions
@@ -49,15 +45,17 @@
   (->> X
        (m/dot (m/transpose W))
        (m/add b)
-       sigmoid))
+       m/logistic))
 
 (defn cost
+  "Returns the logistic cost for
+   Y (expected output) and A (actual output)"
   [Y A]
   (let [m (count Y)]
-    (* (/ -1 m) (m/esum (m/add (m/emul Y
-                                       (m/log A))
-                               (m/emul (m/sub 1 Y)
-                                       (m/log (m/sub 1 A))))))))
+    (* (/ -1 m) (m/esum (M/+ (M/* Y ; term relevant when Y=1
+                                  (m/log A))
+                             (M/* (m/sub 1 Y) ; term relevant when Y=0
+                                  (m/log (m/sub 1 A))))))))
 
 (defn back-prop
   "Given A, Y & X, returns gradients for W and b"
