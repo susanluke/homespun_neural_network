@@ -36,26 +36,36 @@
     (is (> 0.01 (sut/cost [1 1 0 1]
                           [0.999 0.9999 0.001 0.999])))))
 
-(deftest coursera-test
-  (testing "test scenario on coursera"
-    (let [W [1 2]
-          b 2
-          X [[1 2 -1]
-             [3 4 -3.2]]
-          Y [1 0 1]
-          A (sut/forward-prop X W b)
-          cost (sut/cost Y A)
-          grads (sut/back-prop A Y X)]
-      (println "A" A)
-      (println "cost" cost)
-      (println "grads" grads)
-      (is (almost= 5.801545319394553 cost))
-      (is (every? true?
-                  (map almost= [0.99845601 2.39507239] (:dW grads))))
-      (is (almost= 0.00145557813678 (:db grads))))))
+(deftest coursera-tests
+  (let [W [1 2]
+        b 2
+        X [[1 2 -1]
+           [3 4 -3.2]]
+        Y [1 0 1]]
+    (testing "propagate test scenario on coursera"
+      (let [A (sut/forward-prop X W b)
+            cost (sut/cost Y A)
+            grads (sut/back-prop A Y X)]
+        (is (almost= 5.801545319394553 cost))
+        (is (every? true?
+                    (map almost= [0.99845601 2.39507239] (:dW grads))))
+        (is (almost= 0.00145557813678 (:db grads)))))
+    (testing "optimise scenario on coursera"
+      (let [grads (sut/linear-regression X Y {:W W :b b} 0.009 100)]
+        (is (every? true?
+                    (map almost= [0.19033591 0.12259159] (:W grads))))
+        (is (almost= 1.92535983008 (:b grads)))))))
 
 
 (comment "
+Expected output
+w	[[ 0.19033591] [ 0.12259159]]
+b	1.92535983008
+dw	[[ 0.67752042] [ 1.41625495]]
+db	0.219194504541
+
+
+
 w = np.array([[1.],[2.]]),
 b = 2.,
 X = np.array([[1.,2.,-1.],

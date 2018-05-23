@@ -34,6 +34,15 @@
   {:W (m/zero-matrix n-x 1)
    :b 0})
 
+(defn update-params
+  "Given current weight and bias parameters, their gradients
+  and learning rate, return new weights and bias"
+  [{:keys [W b] :as params}
+   {:keys [dW db] :as grads}
+   learning-rate]
+  {:W (M/- W (M/* learning-rate dW))
+   :b (- b (* learning-rate db))})
+
 (defn forward-prop
   "Returns A for given X, W & b"
   [X W b]
@@ -60,14 +69,19 @@
     {:dW dW
      :db db}))
 
-(defn update-params
-  "Given param"
 
-  [{:keys [W b] :as params}
-   {:keys [dW db] :as grads}
-   learning-rate]
-  {:W (- W (* learning-rate dW))
-   :b (- b (* learning-rate db))})
+(defn linear-regression
+  [X Y {:keys [W b] :as parameters}
+   learning-rate num-iterations]
+  (if (= num-iterations 0)
+    parameters
+    (let [A     (forward-prop X W b)
+          cost  (cost Y A)
+          grads (back-prop A Y X)
+          new-params (update-params parameters grads learning-rate)]
+      (recur X Y new-params
+             learning-rate (dec num-iterations))))
+  )
 
 
 (defn -main
