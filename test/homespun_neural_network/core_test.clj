@@ -3,6 +3,11 @@
             [clojure.core.matrix :as m]
             [homespun-neural-network.core :as sut]))
 
+(defn almost=
+  [n1 n2]
+  (let [diff (Math/abs (- n1 n2))]
+    (< diff 1e-8)))
+
 (deftest init-params-test
   (testing "Map is returned with the right keys"
     (is (= #{:W :b}
@@ -43,7 +48,11 @@
           grads (sut/back-prop A Y X)]
       (println "A" A)
       (println "cost" cost)
-      (println "grads" grads))))
+      (println "grads" grads)
+      (is (almost= 5.801545319394553 cost))
+      (is (every? true?
+                  (map almost= [0.99845601 2.39507239] (:dW grads))))
+      (is (almost= 0.00145557813678 (:db grads))))))
 
 
 (comment "
