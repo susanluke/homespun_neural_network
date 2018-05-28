@@ -29,10 +29,19 @@
 
 (defn init-net-params
   "Takes:
-  layer-sizes - list containing number of nodes in each layer"
-  [layer-sizes]
+  layer-sizes - list containing number of nodes in each layer
+  fns - list containing activation fn for each layer
+  Returns:
+  net-params - a map containing
+      :layer-sizes - vector containing number of nodes in each layer
+      :W - a vector containing nil, W1, W2, ... for each layer
+      :b - a vector containing nil, b1, b2, ... for each layer
+  NB initial value in :W, :b is nil to make indexing by layer simpler.
+  "
+  [layer-sizes fns]
   (let [num-layers (count layer-sizes)]
     (loop [net-params {:layer-sizes layer-sizes
+                       :fns fns
                        :W [nil]
                        :b [nil]}
            idx 1]
@@ -50,50 +59,50 @@
                         :b (conj (:b net-params) b))
                  (inc idx)))))))
 
+;; TODO: Maybe we can just map over the arrays, rather than loop/recur?
 (defn update-net-params
-  [net-params grads learning-rate]
+  [{:keys [layer-sizes fns] :as net-params} grads learning-rate]
   (let [num-layers (num-layers net-params)]
-    (loop [new-net-params {}
+    (loop [new-net-params {:layer-sizes layer-sizes
+                           :fns fns
+                           :W [nil]
+                           :b [nil]}
            idx 1]
       (if (= num-layers idx)
         new-net-params
-        (let [W-key (keyword (str "W" idx))
-              W-old (W-key net-params)
-              dW ((keyword (str "dW" idx)) grads)
-              W (M/- W-old (M/* learning-rate dW))
-              b-key (keyword (str "b" idx))
-              b-old (b-key net-params)
-              db ((keyword (str "db" idx)) grads)
-              b (M/- b-old (M/* learning-rate db))]
+        (let [W (nth (:W net-params) idx)
+              b (nth (:b net-params) idx)
+              dW (nth (:dW grads) idx)
+              db (nth (:db grads) idx)
+              W-new (M/- W (M/* learning-rate dW))
+              b-new (M/- b (M/* learning-rate db))]
           (recur (assoc new-net-params
-                        W-key W
-                        b-key b)
+                        :W (conj (:W new-net-params) W-new)
+                        :b (conj (:b new-net-params) b-new))
                  (inc idx)))))))
 
+;; TODO: poss re-write as reduce?
 (defn forward-prop
   [X net-params]
   (let [num-layers (num-layers net-params)]
-    (loop [state {:A0 X}
+    (loop [state {:A [X]
+                  :Z [nil]}
            idx 1]
-      (println "[forward-prop] idx:" idx)
       (if (= num-layers idx)
         state
-        (recur
-         (let [W-key (make-key :W idx)
-               b-key (make-key :b idx)
-               A-key (make-key :A idx)
-               Z-key (make-key :Z idx)
-               fn-key (make-key :fn idx)
-               A-prev-key (make-key :A (dec idx))
-               W (W-key net-params)
-               b (b-key net-params)
-               activation-fn (fn-key net-params)
-               Z (->> (A-prev-key state)
-                      (m/dot W)
-                      (M/+ b))
-               A (activation-fn Z)]
-           (assoc state Z-key Z A-key A))
-         (inc idx))))))
+        (let [W      (nth (:W net-params) idx)
+              b      (nth (:b net-params) idx)
+              A-prev (nth (:A state) (dec idx))
+              fn-key (nth (:fns net-params) idx)
+              a-fn   (get-in activation-fns [fn-key :fn])
+              Z      (->> A-prev
+                          (m/dot W)
+                          (M/+ b))
+              A      (a-fn Z)]
+          (recur (assoc state
+                        :Z (conj (:Z state) Z)
+                        :A (conj (:A state) A))
+                 (inc idx)))))))
 
 (defn cost
   "Y & A are matrices of shape [1 m]
@@ -107,6 +116,8 @@
                 (M/* (M/- 1 Y) (m/log (M/- 1 A))))))))
 
 
+;; TODO: need to refactor based on new format for
+;; net-params and state
 (defn back-prop
   "Given current activation state for the network, calculates and
   returns gradients for each weight and bias"
