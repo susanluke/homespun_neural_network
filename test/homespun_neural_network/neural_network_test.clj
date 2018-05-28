@@ -20,11 +20,11 @@
     10  1))
 
 (deftest init-net-params-test
-  (let [res (sut/init-net-params [2 3 1])]
-    (is (= [3 2] (m/shape (:W1 res))))
-    (is (= [1 3] (m/shape (:W2 res))))
-    (is (= 0 (:b1 res)))
-    (is (= 0 (:b2 res)))))
+  (let [{:keys [W b]} (sut/init-net-params [2 3 1])]
+    (is (= [3 2] (m/shape (nth W 1))))
+    (is (= [1 3] (m/shape (nth W 2))))
+    (is (= 0 (nth b 1)))
+    (is (= 0 (nth b 2)))))
 
 (deftest update-net-params-test
   (let [net-params {:layer-sizes [2 3 2]
@@ -101,5 +101,7 @@
                         (m/reshape (drop W-num v) b-size))
                  (inc layer)
                  (drop (+ W-num num-nodes) v)))))))
+
+
 
 ;; TODO need to check the functions above and implement grad-check

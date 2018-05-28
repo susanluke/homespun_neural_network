@@ -22,7 +22,7 @@
                             :dfn relu-grad}
                      :sigmoid {:fn m/logistic
                                :dfn logistic-grad}
-                     :identity {:fn identity
+                     :identity {:fn identity ; only for test purposes
                                 :dfn (constantly 1)}})
 
 (defn make-key [k n] (keyword (str (name k) n)))
@@ -32,7 +32,9 @@
   layer-sizes - list containing number of nodes in each layer"
   [layer-sizes]
   (let [num-layers (count layer-sizes)]
-    (loop [net-params {:layer-sizes layer-sizes}
+    (loop [net-params {:layer-sizes layer-sizes
+                       :W [nil]
+                       :b [nil]}
            idx 1]
       (if (= num-layers idx)
         net-params
@@ -44,8 +46,8 @@
                     (M/* initial-weight-scale))
               b 0] ; set b to 0, rely on broadcasting to scale up
           (recur (assoc net-params
-                        (keyword (str "W" idx)) W
-                        (keyword (str "b" idx)) b)
+                        :W (conj (:W net-params) W)
+                        :b (conj (:b net-params) b))
                  (inc idx)))))))
 
 (defn update-net-params
