@@ -107,14 +107,9 @@
 ;; TODO these 2 fns need refactoring based on new net-param format
 (defn net-params->vector
   [net-params]
-  (let [W (:W net-params)
-        b (:b net-params)]
-    (m/join (->> W
-                 (map matrix->vector)
-                 (apply m/join))
-            (->> b
-                 (map matrix->vector)
-                 (apply m/join)))))
+  (->> (m/join (:W net-params) (:b net-params))
+       (map matrix->vector)
+       (apply m/join)))
 
 (defn vector->net-params
   [v layer-sizes]
