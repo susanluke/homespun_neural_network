@@ -99,22 +99,22 @@
               [[6] [16] [23]]
               [[11854] [18555]]])))))
 
+(defn matrix->vector
+  [m]
+  (let [size (apply * (m/shape m))]
+    (m/reshape m [size])))
+
 ;; TODO these 2 fns need refactoring based on new net-param format
 (defn net-params->vector
   [net-params]
-  (let [num-layers (sut/num-layers net-params)]
-    (loop [layer 1
-           v []]
-      (if (= num-layers layer)
-        v
-        (let [W ((sut/make-key :W layer) net-params)
-              b ((sut/make-key :b layer) net-params)
-              W-size (apply * (m/shape W))
-              b-size (apply * (m/shape b))]
-          (recur (inc layer)
-                 (concat v
-                         (m/reshape W [W-size])
-                         (m/reshape b [b-size]))))))))
+  (let [W (:W net-params)
+        b (:b net-params)]
+    (m/join (->> W
+                 (map matrix->vector)
+                 (apply m/join))
+            (->> b
+                 (map matrix->vector)
+                 (apply m/join)))))
 
 (defn vector->net-params
   [v layer-sizes]
@@ -140,3 +140,18 @@
 
 
 ;; TODO need to check the functions above and implement grad-check
+
+
+(comment (let [num-layers (sut/num-layers net-params)]
+           (loop [layer 1
+                  v []]
+             (if (= num-layers layer)
+               v
+               (let [W ((sut/make-key :W layer) net-params)
+                     b ((sut/make-key :b layer) net-params)
+                     W-size (apply * (m/shape W))
+                     b-size (apply * (m/shape b))]
+                 (recur (inc layer)
+                        (concat v
+                                (m/reshape W [W-size])
+                                (m/reshape b [b-size]))))))))
