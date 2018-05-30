@@ -21,3 +21,12 @@
          m/rows
          (map (partial apply +))
          (M/* (/ 1 m)))))
+
+(defn matrix-row-mean-keep-dims
+  [mat]
+  (let [m (-> mat m/shape second)]
+    (map (comp
+          vector
+          (partial * (/ 1 m))
+          (partial apply +))
+         (m/rows mat))))

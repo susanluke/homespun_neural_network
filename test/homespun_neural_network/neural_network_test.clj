@@ -3,6 +3,27 @@
             [clojure.core.matrix :as m]
             [homespun-neural-network.neural-network :as sut]))
 
+(defn almost=
+  [n1 n2]
+  (let [diff (Math/abs (- n1 n2))]
+    (< diff 1e-8)))
+
+;; Sample data
+(def net-params  {:layer-sizes [2 3 2]
+                  :W [nil
+                      [[1 2]
+                       [4 5]
+                       [6 7]]
+                      [[100 200 350]
+                       [300 400 450]]]
+                  :b [nil
+                      [[1]
+                       [2]
+                       [3]]
+                      [[4]
+                       [5]]]
+                  :fns (repeat 3 :identity)})
+
 (deftest relu-test
   (are [in out] (= (sut/relu in) out)
     -10 0
@@ -18,6 +39,12 @@
     0   0
     1   1
     10  1))
+
+(deftest logistic-grad-test
+  (are [in out] (almost= (sut/logistic-grad in) out)
+    0 0.25
+    100 0.0
+    -100 0.0))
 
 (deftest init-net-params-test
   (let [{:keys [W b]} (sut/init-net-params [2 3 1]
@@ -75,20 +102,6 @@
 (deftest forward-prop-test
   (testing "basic forward prop"
     (let [X [[1] [2]]
-          net-params {:layer-sizes [2 3 2]
-                      :W [nil
-                          [[1 2]
-                           [4 5]
-                           [6 7]]
-                          [[100 200 350]
-                           [300 400 450]]]
-                      :b [nil
-                          [[1]
-                           [2]
-                           [3]]
-                          [[4]
-                           [5]]]
-                      :fns (repeat 3 :identity)}
           state (sut/forward-prop X net-params)]
       (is (= (:A state)
              [X
@@ -104,49 +117,65 @@
   (let [size (apply * (m/shape m))]
     (m/reshape m [size])))
 
-;; TODO these 2 fns need refactoring based on new net-param format
 (defn net-params->vector
+  "Converts W & b network parameters into a single vector, for use
+  in grad check"
   [net-params]
-  (->> (m/join (:W net-params) (:b net-params))
+  ;; NB, drop initial nil in :W and :b
+  (->> (interleave (rest (:W net-params)) (rest (:b net-params)))
        (map matrix->vector)
        (apply m/join)))
 
 (defn vector->net-params
-  [v layer-sizes]
+  [v layer-sizes fns]
   (let [num-layers (count layer-sizes)]
-    (loop [net-params {:layer-sizes layer-sizes}
+    (loop [net-params {:layer-sizes layer-sizes
+                       :fns fns
+                       :W [nil]
+                       :b [nil]}
            layer 1
            v v]
       (if (= num-layers layer)
         net-params
         (let [num-nodes (nth layer-sizes layer)
               num-nodes-prev (nth layer-sizes (dec layer))
-              W-size [num-nodes num-nodes-prev]
-              b-size [num-nodes 1]
-              W-num (apply * W-size)]
-          (recur (assoc net-params
-                        (sut/make-key :W layer)
-                        (m/reshape v W-size)
-                        (sut/make-key :b layer)
-                        (m/reshape (drop W-num v) b-size))
-                 (inc layer)
-                 (drop (+ W-num num-nodes) v)))))))
+              W-shape [num-nodes num-nodes-prev]
+              b-shape [num-nodes 1]
+              W-num (apply * W-shape)]
+          (recur
+           (assoc net-params
+                  :W (conj (:W net-params) (m/reshape v W-shape))
+                  :b (conj (:b net-params) (m/reshape
+                                            (drop W-num v)
+                                            b-shape)))
+           (inc layer)
+           (drop (+ W-num num-nodes) v)))))))
+
+
+(deftest grad-check-test
+  (testing
+      "Checking the gradient manually is only slightly different
+       from that calculated by back-prop"
+    (let [net-params {:layer-sizes [2 3 1],
+                      :fns [:identity :relu :sigmoid],
+                      :W
+                      [nil
+                       [[7.308781907032909E-5 4.100808114922017E-5]
+                        [2.077148413097171E-5 3.327170559595112E-5]
+                        [9.677559094241208E-5 6.1171822657613E-7]]
+                       [[7.311469360199059E-5
+                         9.014476240300544E-5
+                         4.9682259343089074E-5]]],
+                      :b [nil 0 0]}
+          X [[1 3] [1000 200000000]]
+          Y [[0 1]]
+          state (sut/forward-prop X net-params)
+          _ (println "state:" state)
+          grads (sut/back-prop X Y net-params state)
+          ]
+      (is (= [1] grads))
+      )))
 
 
 
 ;; TODO need to check the functions above and implement grad-check
-
-
-(comment (let [num-layers (sut/num-layers net-params)]
-           (loop [layer 1
-                  v []]
-             (if (= num-layers layer)
-               v
-               (let [W ((sut/make-key :W layer) net-params)
-                     b ((sut/make-key :b layer) net-params)
-                     W-size (apply * (m/shape W))
-                     b-size (apply * (m/shape b))]
-                 (recur (inc layer)
-                        (concat v
-                                (m/reshape W [W-size])
-                                (m/reshape b [b-size]))))))))

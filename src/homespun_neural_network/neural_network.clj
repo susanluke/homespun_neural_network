@@ -16,7 +16,11 @@
 
 (defn relu [m] (m/emap #(max 0 %) m))
 (defn relu-grad [m] (m/emap #(if (< 0 %) 1 0) m))
-(defn logistic-grad [m] (m/emap #(* % (- 1 %)) m))
+(defn logistic-grad
+  [m]
+  (m/emap #(* (m/logistic %)
+              (- 1 (m/logistic %)))
+          m))
 
 (def activation-fns {:relu {:fn relu
                             :dfn relu-grad}
@@ -106,7 +110,7 @@
 
 (defn cost
   "Y & A are matrices of shape [1 m]
-  Returns the logisitic cost based on formula:
+  Returns the logistic cost based on formula:
   L = (-1*m).sum[y.log(a) + (1-y).log(1-a)]"
   [Y A]
   (let [m (-> Y m/shape second)] ; number of columns in Y
@@ -115,42 +119,69 @@
                 (M/* Y (m/log A))
                 (M/* (M/- 1 Y) (m/log (M/- 1 A))))))))
 
+(defn cost-grad
+  "Returns d(cost(Y,A)/dA
+  returns a matrix of [[1]]"
+  [Y A]
+  (hnn-m/matrix-row-mean-keep-dims (M/- (M// Y A)
+                                        (M// (M/- 1 Y)
+                                             (M/- 1 A)))))
 
-;; TODO: need to refactor based on new format for
-;; net-params and state
+;; TODO - maybe just calc dA prior to loop/recur
+;; then need to calc dZ dW dB and dA-prev
 (defn back-prop
   "Given current activation state for the network, calculates and
   returns gradients for each weight and bias"
-  [X Y state net-params]
+  [X Y net-params state]
   (let [layers (num-layers net-params)
         m (-> Y m/shape second)
-        A ((make-key :A (dec layers)) state)
-        dZl (m/esum (M/- A Y))]
+        A-l (last (:A state))
+        dZ-l [[(m/esum (M/- A-l Y))]]]
     (loop [l (dec layers)
-           grads {(make-key :dZ l) dZl}]
+           grads {:dZ [dZ-l]
+                  :dA [nil] ; don't bother calculating dJ/dA
+                  :dW []
+                  :db []}]
       (if (= 0 l)
         grads
         (recur
          (dec l)
-         (let [dZ     ((make-key :dZ l) grads)
-               A-prev ((make-key :dA (dec l)) state)
-               W      ((make-key :W l) net-params)
-               Z-prev ((make-key :Z (dec l)) state)
-               dfn-prev (:dfn ((make-key :fn (dec l)) net-params))
-               dW (-> dZ
-                      (m/dot (m/transpose A-prev))
-                      hnn-m/matrix-row-mean)
-               db (hnn-m/matrix-row-mean dW)
-               dA-prev (->> dZ
-                            (m/dot (m/transpose A))
-                            hnn-m/matrix-row-mean)
-               dZ-prev (->> dA-prev
-                            (M/* (m/emap dfn-prev Z-prev)))]
+         (let [;; retrieve relevant parameters
+               _ (println "---")
+               _ (println "LAYER " l)
+               dZ     (last (:dZ grads))
+               W      (nth (:W net-params) l)
+               A-prev (nth (:A state) (dec l))
+               Z-prev (nth (:Z state) (dec l))
+               fn-key-prev (nth (:fns net-params) (dec l))
+               dfn-prev (get-in activation-fns [fn-key-prev :dfn])
+               ;; perform differential calculations
+               _ (println "dZ:" (m/shape dZ) dZ)
+               _ (println "W:" (m/shape W))
+               _ (println "A-prev:" (m/shape A-prev))
+               _ (println "Z-prev:" (m/shape Z-prev))
+
+               _ (println "dot p1:" (hnn-m/matrix-row-mean-keep-dims A-prev))
+               _ (println "dot p2:" (m/transpose dZ))
+
+               dW (m/dot
+                   (hnn-m/matrix-row-mean-keep-dims A-prev)
+                   (m/transpose dZ))
+               _ (println "dW:" (m/shape dW) dW)
+               db (hnn-m/matrix-row-mean-keep-dims dZ)
+               _ (println "db:" (m/shape db) db)
+               dA-prev (m/dot (m/transpose W) dZ)
+               _ (println "dA-prev:" (m/shape dA-prev) dA-prev)
+               dZ-prev (if (= l 1)
+                         nil ; hack to avoid going back too far
+                         (M/* (hnn-m/matrix-row-mean-keep-dims (m/emap dfn-prev Z-prev))
+                              dA-prev))
+               _ (println "dZ-prev:" (m/shape dZ-prev) dZ-prev)]
            (assoc grads
-                  (make-key :dW l) dW
-                  (make-key :db l) db
-                  (make-key :dA (dec l)) dA-prev
-                  (make-key :dZ (dec l)) dZ-prev)))))))
+                  :dW (conj (:dW grads) dW)
+                  :db (conj (:db grads) db)
+                  :dA (conj (:dA grads) dA-prev)
+                  :dZ (conj (:dZ grads) dZ-prev))))))))
 
 (defn neural-network
   [X Y net-params learning-rate num-iterations]
@@ -160,5 +191,41 @@
           A ((make-key :A (num-layers net-params)) state)
           cost (cost Y A)
           grads (back-prop X Y state net-params)
-          new-net-params (update-net-params net-params grads learning-rate)]
+          new-net-params (update-net-params net-params
+                                            grads
+                                            learning-rate)]
       (recur X Y net-params learning-rate num-iterations))))
+
+(comment (defn back-prop
+           "Given current activation state for the network, calculates and
+  returns gradients for each weight and bias"
+           [X Y net-params state]
+           (let [layers (num-layers net-params)
+                 m (-> Y m/shape second)
+                 A ((make-key :A (dec layers)) state)
+                 dZl (m/esum (M/- A Y))]
+             (loop [l (dec layers)
+                    grads {(make-key :dZ l) dZl}]
+               (if (= 0 l)
+                 grads
+                 (recur
+                  (dec l)
+                  (let [dZ     ((make-key :dZ l) grads)
+                        A-prev ((make-key :dA (dec l)) state)
+                        W      ((make-key :W l) net-params)
+                        Z-prev ((make-key :Z (dec l)) state)
+                        dfn-prev (:dfn ((make-key :fn (dec l)) net-params))
+                        dW (-> dZ
+                               (m/dot (m/transpose A-prev))
+                               hnn-m/matrix-row-mean-keep-dims)
+                        db (hnn-m/matrix-row-mean dW)
+                        dA-prev (->> dZ
+                                     (m/dot (m/transpose A))
+                                     hnn-m/matrix-row-mean)
+                        dZ-prev (->> dA-prev
+                                     (M/* (m/emap dfn-prev Z-prev)))]
+                    (assoc grads
+                           (make-key :dW l) dW
+                           (make-key :db l) db
+                           (make-key :dA (dec l)) dA-prev
+                           (make-key :dZ (dec l)) dZ-prev))))))))
