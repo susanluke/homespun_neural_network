@@ -57,7 +57,7 @@
               W (-> (take (* W-rows W-cols) random-numbers)
                     (m/reshape [W-rows W-cols])
                     (M/* initial-weight-scale))
-              b 0] ; set b to 0, rely on broadcasting to scale up
+              b (m/zero-matrix W-rows 1)]
           (recur (assoc net-params
                         :W (conj (:W net-params) W)
                         :b (conj (:b net-params) b))
@@ -88,20 +88,27 @@
 ;; TODO: poss re-write as reduce?
 (defn forward-prop
   [X net-params]
-  (let [num-layers (num-layers net-params)]
+  (let [num-layers (num-layers net-params)
+        m (-> X m/shape second)]
     (loop [state {:A [X]
                   :Z [nil]}
            idx 1]
       (if (= num-layers idx)
         state
-        (let [W      (nth (:W net-params) idx)
+        (let [_ (println "[FP]LAYER:" idx)
+              W      (nth (:W net-params) idx)
               b      (nth (:b net-params) idx)
               A-prev (nth (:A state) (dec idx))
               fn-key (nth (:fns net-params) idx)
               a-fn   (get-in activation-fns [fn-key :fn])
+              _ (println "[FP]W:" (m/shape W) W)
+              _ (println "[FP]b:" (m/shape b) b)
+              _ (println "[FP]A-prev:" (m/shape A-prev) A-prev)
               Z      (->> A-prev
                           (m/dot W)
-                          (M/+ b))
+                          (M/+ (apply (partial m/join-along 1) ; broadcast b out to match Z dims
+                                      (repeat m b))))
+              _ (println "[FP]Z:" (m/shape Z) Z)
               A      (a-fn Z)]
           (recur (assoc state
                         :Z (conj (:Z state) Z)
@@ -138,18 +145,22 @@
         A-l (last (:A state))
         dZ-l [[(m/esum (M/- A-l Y))]]]
     (loop [l (dec layers)
-           grads {:dZ [dZ-l]
-                  :dA [nil] ; don't bother calculating dJ/dA
-                  :dW []
-                  :db []}]
+           ;; use lists so conj adds to the head
+           grads {:dZ (list dZ-l)
+                  :dA '(nil)  ; don't bother calculating dJ/dA
+                  :dW '()
+                  :db '()}]
       (if (= 0 l)
-        grads
+        (assoc grads
+               ;; Add in dW-0 and db-0 so indexes match up
+               :dW (conj (:dW grads) nil)
+               :db (conj (:db grads) nil))
         (recur
          (dec l)
          (let [;; retrieve relevant parameters
                _ (println "---")
-               _ (println "LAYER " l)
-               dZ     (last (:dZ grads))
+               _ (println "[BP]LAYER " l)
+               dZ     (first (:dZ grads))
                W      (nth (:W net-params) l)
                A-prev (nth (:A state) (dec l))
                Z-prev (nth (:Z state) (dec l))
@@ -165,12 +176,14 @@
                _ (println "dot p2:" (m/transpose dZ))
 
                dW (m/dot
-                   (hnn-m/matrix-row-mean-keep-dims A-prev)
-                   (m/transpose dZ))
+                   dZ
+                   (-> A-prev hnn-m/matrix-row-mean-keep-dims m/transpose))
                _ (println "dW:" (m/shape dW) dW)
                db (hnn-m/matrix-row-mean-keep-dims dZ)
                _ (println "db:" (m/shape db) db)
-               dA-prev (m/dot (m/transpose W) dZ)
+               dA-prev (if (= l 1)
+                         nil ; hack to avoid going back too far
+                         (m/dot (m/transpose W) dZ))
                _ (println "dA-prev:" (m/shape dA-prev) dA-prev)
                dZ-prev (if (= l 1)
                          nil ; hack to avoid going back too far
