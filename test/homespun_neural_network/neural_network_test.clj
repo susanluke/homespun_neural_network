@@ -198,7 +198,9 @@
                          4.9682259343089074E-5]]],
                       :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
           X [[1 3] [1000 200000000]]
+          X [[1] [1000]]
           Y [[0 1]]
+          Y [[0]]
           state (sut/forward-prop X net-params)
           _ (println "state:" state)
           grads (sut/back-prop X Y net-params state)

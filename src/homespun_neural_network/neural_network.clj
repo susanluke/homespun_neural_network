@@ -16,6 +16,8 @@
 
 (defn relu [m] (m/emap #(max 0 %) m))
 (defn relu-grad [m] (m/emap #(if (< 0 %) 1 0) m))
+(defn identity-in-range [m] (m/emap #(max 0 (min 1 %)) m))
+(defn identity-in-range-grad [m] (m/emap #(if (< 0 % 1) % 0)))
 (defn logistic-grad
   [m]
   (m/emap #(* (m/logistic %)
@@ -27,7 +29,9 @@
                      :sigmoid {:fn m/logistic
                                :dfn logistic-grad}
                      :identity {:fn identity ; only for test purposes
-                                :dfn (constantly 1)}})
+                                :dfn (constantly 1)}
+                     :identity-in-range {:fn identity-in-range
+                                         :dfn identity-in-range-grad}})
 
 (defn make-key [k n] (keyword (str (name k) n)))
 
