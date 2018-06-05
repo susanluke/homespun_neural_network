@@ -160,7 +160,6 @@
            (inc layer)
            (drop (+ W-num num-nodes) v)))))))
 
-
 (defn grad-approx
   [X Y {:keys [layer-sizes fns] :as net-params} epsilon]
   (let [net-params-vector (net-params->vector net-params)]
@@ -182,10 +181,10 @@
            (* 2 epsilon))))))
 
 
-(deftest grad-check-test
+(deftest grad-check-single-training-case-test
   (testing
       "Checking the gradient manually is only slightly different
-       from that calculated by back-prop"
+       from that calculated by back-prop for a single test case"
     (let [net-params {:layer-sizes [2 3 1],
                       :fns [:identity :relu :sigmoid],
                       :W
@@ -197,9 +196,7 @@
                          9.014476240300544E-5
                          4.9682259343089074E-5]]],
                       :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
-          X [[1 3] [1000 200000000]]
           X [[1] [1000]]
-          Y [[0 1]]
           Y [[0]]
           state (sut/forward-prop X net-params)
           _ (println "state:" state)
@@ -212,8 +209,39 @@
       (println "grads-approx2: " grads-approx)
       (println "grads->vector" (grads->vector grads))
       (println "grads2:" grads)
-      (is (= [1] grads))
-      )))
+      (is (every? true?
+                  (map almost= (grads->vector grads) grads-approx))))))
+
+(deftest grad-check-two-training-cases-test
+  (comment (testing
+               "Checking the gradient manually is only slightly different
+       from that calculated by back-prop for a two test cases"
+             (let [net-params {:layer-sizes [2 3 1],
+                               :fns [:identity :relu :sigmoid],
+                               :W
+                               [nil
+                                [[7.308781907032909E-5 4.100808114922017E-5]
+                                 [2.077148413097171E-5 3.327170559595112E-5]
+                                 [9.677559094241208E-5 6.1171822657613E-7]]
+                                [[7.311469360199059E-5
+                                  9.014476240300544E-5
+                                  4.9682259343089074E-5]]],
+                               :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
+                   X [[1 3] [1000 200000000]]
+                   Y [[0 1]]
+                   state (sut/forward-prop X net-params)
+                   _ (println "state:" state)
+                   grads (sut/back-prop X Y net-params state)
+                   epsilon 1e-7
+                   grads-approx (grad-approx X Y net-params epsilon)]
+               (println "grads-approx: " grads-approx)
+               (println "grads:" grads)
+               (println "----")
+               (println "grads-approx2: " grads-approx)
+               (println "grads->vector" (grads->vector grads))
+               (println "grads2:" grads)
+               (is (= [1] grads))
+               ))))
 
 
 

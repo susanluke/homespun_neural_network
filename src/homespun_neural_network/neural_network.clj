@@ -212,37 +212,3 @@
                                             grads
                                             learning-rate)]
       (recur X Y net-params learning-rate num-iterations))))
-
-(comment (defn back-prop
-           "Given current activation state for the network, calculates and
-  returns gradients for each weight and bias"
-           [X Y net-params state]
-           (let [layers (num-layers net-params)
-                 m (-> Y m/shape second)
-                 A ((make-key :A (dec layers)) state)
-                 dZl (m/esum (M/- A Y))]
-             (loop [l (dec layers)
-                    grads {(make-key :dZ l) dZl}]
-               (if (= 0 l)
-                 grads
-                 (recur
-                  (dec l)
-                  (let [dZ     ((make-key :dZ l) grads)
-                        A-prev ((make-key :dA (dec l)) state)
-                        W      ((make-key :W l) net-params)
-                        Z-prev ((make-key :Z (dec l)) state)
-                        dfn-prev (:dfn ((make-key :fn (dec l)) net-params))
-                        dW (-> dZ
-                               (m/dot (m/transpose A-prev))
-                               hnn-m/matrix-row-mean-keep-dims)
-                        db (hnn-m/matrix-row-mean dW)
-                        dA-prev (->> dZ
-                                     (m/dot (m/transpose A))
-                                     hnn-m/matrix-row-mean)
-                        dZ-prev (->> dA-prev
-                                     (M/* (m/emap dfn-prev Z-prev)))]
-                    (assoc grads
-                           (make-key :dW l) dW
-                           (make-key :db l) db
-                           (make-key :dA (dec l)) dA-prev
-                           (make-key :dZ (dec l)) dZ-prev))))))))

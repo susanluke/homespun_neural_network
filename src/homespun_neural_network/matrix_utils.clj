@@ -2,6 +2,8 @@
   (:require [clojure.core.matrix :as m]
             [clojure.core.matrix.operators :as M]))
 
+;; TODO: requires tests
+
 (defn sum-rows
   [mat]
   (map (partial apply +)
@@ -30,3 +32,8 @@
           (partial * (/ 1 m))
           (partial apply +))
          (m/rows mat))))
+
+(defn broadcast-sideways
+  [mat n-cols]
+  (apply (partial m/join-along 1) ; broadcast b out to match Z dims
+         (repeat n-cols mat)))
