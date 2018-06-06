@@ -1,12 +1,18 @@
 (ns homespun-neural-network.neural-network-test
   (:require [clojure.test :refer :all]
             [clojure.core.matrix :as m]
+            [clojure.core.matrix.operators :as M]
             [homespun-neural-network.neural-network :as sut]))
 
 (defn almost=
   [n1 n2]
   (let [diff (Math/abs (- n1 n2))]
-    (< diff 1e-8)))
+    (< diff 1e-7)))
+
+;; Max Euclidean distance ratio between gradient vectors.
+;; According to Ng, less than 10^-7 is great, 10^-5 is borderline ok
+;; 10^-3 probably means something is awry.
+(def max-dist-ratio 1e-7)
 
 ;; Sample data
 (def net-params  {:layer-sizes [2 3 2]
@@ -160,6 +166,7 @@
            (inc layer)
            (drop (+ W-num num-nodes) v)))))))
 
+
 (defn grad-approx
   [X Y {:keys [layer-sizes fns] :as net-params} epsilon]
   (let [net-params-vector (net-params->vector net-params)]
@@ -202,46 +209,41 @@
           _ (println "state:" state)
           grads (sut/back-prop X Y net-params state)
           epsilon 1e-7
-          grads-approx (grad-approx X Y net-params epsilon)]
-      (println "grads-approx: " grads-approx)
-      (println "grads:" grads)
-      (println "----")
-      (println "grads-approx2: " grads-approx)
-      (println "grads->vector" (grads->vector grads))
-      (println "grads2:" grads)
-      (is (every? true?
-                  (map almost= (grads->vector grads) grads-approx))))))
+          grads-approx (grad-approx X Y net-params epsilon)
+          grads-vec (grads->vector grads)
+          grad-diff (/ (m/length (M/- grads-approx grads-vec))
+                       (+ (m/length grads-approx) (m/length grads-vec)))]
+      ;; TODO : change to proper euclidean distance test
+      (is (> max-dist-ratio grad-diff)))))
 
 (deftest grad-check-two-training-cases-test
-  (comment (testing
-               "Checking the gradient manually is only slightly different
+  (testing
+      "Checking the gradient manually is only slightly different
        from that calculated by back-prop for a two test cases"
-             (let [net-params {:layer-sizes [2 3 1],
-                               :fns [:identity :relu :sigmoid],
-                               :W
-                               [nil
-                                [[7.308781907032909E-5 4.100808114922017E-5]
-                                 [2.077148413097171E-5 3.327170559595112E-5]
-                                 [9.677559094241208E-5 6.1171822657613E-7]]
-                                [[7.311469360199059E-5
-                                  9.014476240300544E-5
-                                  4.9682259343089074E-5]]],
-                               :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
-                   X [[1 3] [1000 200000000]]
-                   Y [[0 1]]
-                   state (sut/forward-prop X net-params)
-                   _ (println "state:" state)
-                   grads (sut/back-prop X Y net-params state)
-                   epsilon 1e-7
-                   grads-approx (grad-approx X Y net-params epsilon)]
-               (println "grads-approx: " grads-approx)
-               (println "grads:" grads)
-               (println "----")
-               (println "grads-approx2: " grads-approx)
-               (println "grads->vector" (grads->vector grads))
-               (println "grads2:" grads)
-               (is (= [1] grads))
-               ))))
+    (let [net-params {:layer-sizes [2 3 1],
+                      :fns [:identity :relu :sigmoid],
+                      :W
+                      [nil
+                       [[7.308781907032909E-5 4.100808114922017E-5]
+                        [2.077148413097171E-5 3.327170559595112E-5]
+                        [9.677559094241208E-5 6.1171822657613E-7]]
+                       [[7.311469360199059E-5
+                         9.014476240300544E-5
+                         4.9682259343089074E-5]]],
+                      :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
+          X [[1 3] [1000 200000000]]
+          Y [[0 1]]
+          state (sut/forward-prop X net-params)
+          _ (println "state:" state)
+          grads (sut/back-prop X Y net-params state)
+          epsilon 1e-7
+          grads-approx (grad-approx X Y net-params epsilon)
+          grads-vec (grads->vector grads)
+          grad-diff (/ (m/length (M/- grads-approx grads-vec))
+                       (+ (m/length grads-approx) (m/length grads-vec)))]
+      (is (> max-dist-ratio grad-diff))
+
+      )))
 
 
 

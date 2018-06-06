@@ -147,7 +147,7 @@
   (let [layers (num-layers net-params)
         m (-> Y m/shape second)
         A-l (last (:A state))
-        dZ-l [[(m/esum (M/- A-l Y))]]]
+        dZ-l (M/- A-l Y)]
     (loop [l (dec layers)
            ;; use lists so conj adds to the head
            grads {:dZ (list dZ-l)
@@ -179,9 +179,11 @@
                _ (println "dot p1:" (hnn-m/matrix-row-mean-keep-dims A-prev))
                _ (println "dot p2:" (m/transpose dZ))
 
-               dW (m/dot
-                   dZ
-                   (-> A-prev hnn-m/matrix-row-mean-keep-dims m/transpose))
+               dZ-mean (hnn-m/matrix-row-mean-keep-dims dZ)
+
+               dW (M// (m/dot
+                        dZ
+                        (m/transpose A-prev)) m)
                _ (println "dW:" (m/shape dW) dW)
                db (hnn-m/matrix-row-mean-keep-dims dZ)
                _ (println "db:" (m/shape db) db)
@@ -191,7 +193,7 @@
                _ (println "dA-prev:" (m/shape dA-prev) dA-prev)
                dZ-prev (if (= l 1)
                          nil ; hack to avoid going back too far
-                         (M/* (hnn-m/matrix-row-mean-keep-dims (m/emap dfn-prev Z-prev))
+                         (M/* (m/emap dfn-prev Z-prev)
                               dA-prev))
                _ (println "dZ-prev:" (m/shape dZ-prev) dZ-prev)]
            (assoc grads
