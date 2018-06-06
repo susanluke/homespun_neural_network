@@ -14,6 +14,9 @@
 ;; 10^-3 probably means something is awry.
 (def max-dist-ratio 1e-7)
 
+;; Value used to change params up/down when performing grad-check
+(def epsilon 1e-7)
+
 ;; Sample data
 (def net-params  {:layer-sizes [2 3 2]
                   :W [nil
@@ -129,19 +132,22 @@
   "Converts W & b network parameters into a single vector, for use
   in grad check"
   [net-params]
-  ;; NB, drop initial nil in :W and :b
+  ;; use 'rest' to drop initial nil in :W and :b
   (->> (interleave (rest (:W net-params)) (rest (:b net-params)))
        (map matrix->vector)
        (apply m/join)))
 
-;; TODO need to reverse grads - prob in back-prop
 (defn grads->vector
+  "Takes dW and db values and converts to a vector in the same
+  format as output by grad-approx, so that values can be compared."
   [grads]
   (->> (interleave (rest (:dW grads)) (rest (:db grads)))
        (map matrix->vector)
        (apply m/join)))
 
 (defn vector->net-params
+  "Creates a vector containing W & b values in order
+  W1 vals, b1 vals, W2 vals, b2 vals, W3 ..."
   [v layer-sizes fns]
   (let [num-layers (count layer-sizes)]
     (loop [net-params {:layer-sizes layer-sizes
@@ -166,8 +172,9 @@
            (inc layer)
            (drop (+ W-num num-nodes) v)))))))
 
-
 (defn grad-approx
+  "Makes an epsilon sized change up and down for each weight and bias
+  value in a network to calculate approximate gradients"
   [X Y {:keys [layer-sizes fns] :as net-params} epsilon]
   (let [net-params-vector (net-params->vector net-params)]
     (for [i (range  (count net-params-vector))]
@@ -187,6 +194,16 @@
         (/ (- J-plus J-minus)
            (* 2 epsilon))))))
 
+(defn gradient-test
+  [net-params X Y]
+  (let [state (sut/forward-prop X net-params)
+        grads (sut/back-prop X Y net-params state)
+        grads-approx (grad-approx X Y net-params epsilon)
+        grads-vec (grads->vector grads)]
+    ;; return ratio of euclidean dist between vectors and
+    ;; vector magnitudes
+    (/ (m/length (M/- grads-approx grads-vec))
+       (+ (m/length grads-approx) (m/length grads-vec)))))
 
 (deftest grad-check-single-training-case-test
   (testing
@@ -205,15 +222,7 @@
                       :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
           X [[1] [1000]]
           Y [[0]]
-          state (sut/forward-prop X net-params)
-          _ (println "state:" state)
-          grads (sut/back-prop X Y net-params state)
-          epsilon 1e-7
-          grads-approx (grad-approx X Y net-params epsilon)
-          grads-vec (grads->vector grads)
-          grad-diff (/ (m/length (M/- grads-approx grads-vec))
-                       (+ (m/length grads-approx) (m/length grads-vec)))]
-      ;; TODO : change to proper euclidean distance test
+          grad-diff (gradient-test net-params X Y)]
       (is (> max-dist-ratio grad-diff)))))
 
 (deftest grad-check-two-training-cases-test
@@ -233,17 +242,8 @@
                       :b [nil [[0.0] [0.0] [0.0]] [[0.0]]]}
           X [[1 3] [1000 200000000]]
           Y [[0 1]]
-          state (sut/forward-prop X net-params)
-          _ (println "state:" state)
-          grads (sut/back-prop X Y net-params state)
-          epsilon 1e-7
-          grads-approx (grad-approx X Y net-params epsilon)
-          grads-vec (grads->vector grads)
-          grad-diff (/ (m/length (M/- grads-approx grads-vec))
-                       (+ (m/length grads-approx) (m/length grads-vec)))]
-      (is (> max-dist-ratio grad-diff))
-
-      )))
+          grad-diff (gradient-test net-params X Y)]
+      (is (> max-dist-ratio grad-diff)))))
 
 
 

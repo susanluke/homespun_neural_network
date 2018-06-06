@@ -4,16 +4,13 @@
             [clojure.core.matrix.operators :as M]
             [clojure.core.matrix.random :as mr]))
 
-;; TODO - not sure it's nice to store grads & net params in
-;; maps.  Maybe change to storing in vectors and using numerical
-;; indexes.
-
 ;; Hyperparameters
 (def initial-weight-scale 0.0001)
 
 (defn num-layers [m]
   (count (:layer-sizes m)))
 
+;;; Activation functions and gradient functions
 (defn relu [m] (m/emap #(max 0 %) m))
 (defn relu-grad [m] (m/emap #(if (< 0 %) 1 0) m))
 (defn identity-in-range [m] (m/emap #(max 0 (min 1 %)) m))
@@ -33,19 +30,17 @@
                      :identity-in-range {:fn identity-in-range
                                          :dfn identity-in-range-grad}})
 
-(defn make-key [k n] (keyword (str (name k) n)))
-
 (defn init-net-params
   "Takes:
   layer-sizes - list containing number of nodes in each layer
+                (including layer 0)
   fns - list containing activation fn for each layer
   Returns:
   net-params - a map containing
       :layer-sizes - vector containing number of nodes in each layer
       :W - a vector containing nil, W1, W2, ... for each layer
       :b - a vector containing nil, b1, b2, ... for each layer
-  NB initial value in :W, :b is nil to make indexing by layer simpler.
-  "
+  NB initial value in :W, :b is nil to make indexing by layer simpler. "
   [layer-sizes fns]
   (let [num-layers (count layer-sizes)]
     (loop [net-params {:layer-sizes layer-sizes
@@ -99,20 +94,15 @@
            idx 1]
       (if (= num-layers idx)
         state
-        (let [_ (println "[FP]LAYER:" idx)
-              W      (nth (:W net-params) idx)
+        (let [W      (nth (:W net-params) idx)
               b      (nth (:b net-params) idx)
               A-prev (nth (:A state) (dec idx))
               fn-key (nth (:fns net-params) idx)
               a-fn   (get-in activation-fns [fn-key :fn])
-              _ (println "[FP]W:" (m/shape W) W)
-              _ (println "[FP]b:" (m/shape b) b)
-              _ (println "[FP]A-prev:" (m/shape A-prev) A-prev)
               Z      (->> A-prev
                           (m/dot W)
                           (M/+ (apply (partial m/join-along 1) ; broadcast b out to match Z dims
                                       (repeat m b))))
-              _ (println "[FP]Z:" (m/shape Z) Z)
               A      (a-fn Z)]
           (recur (assoc state
                         :Z (conj (:Z state) Z)
@@ -130,6 +120,8 @@
                 (M/* Y (m/log A))
                 (M/* (M/- 1 Y) (m/log (M/- 1 A))))))))
 
+;; TODO: Not using this function?  Get rid? Or put initial dJ/dA val in
+;; backprop?
 (defn cost-grad
   "Returns d(cost(Y,A)/dA
   returns a matrix of [[1]]"
@@ -164,38 +156,27 @@
          (let [;; retrieve relevant parameters
                _ (println "---")
                _ (println "[BP]LAYER " l)
-               dZ     (first (:dZ grads))
-               W      (nth (:W net-params) l)
-               A-prev (nth (:A state) (dec l))
-               Z-prev (nth (:Z state) (dec l))
+               dZ     (first (:dZ grads))      ; size (n[l],   m)
+               W      (nth (:W net-params) l)  ; size (n[l],   n[l-1])
+               A-prev (nth (:A state) (dec l)) ; size (n[l-1], m)
+               Z-prev (nth (:Z state) (dec l)) ; size (n[l-1], m)
                fn-key-prev (nth (:fns net-params) (dec l))
                dfn-prev (get-in activation-fns [fn-key-prev :dfn])
+
                ;; perform differential calculations
-               _ (println "dZ:" (m/shape dZ) dZ)
-               _ (println "W:" (m/shape W))
-               _ (println "A-prev:" (m/shape A-prev))
-               _ (println "Z-prev:" (m/shape Z-prev))
-
-               _ (println "dot p1:" (hnn-m/matrix-row-mean-keep-dims A-prev))
-               _ (println "dot p2:" (m/transpose dZ))
-
-               dZ-mean (hnn-m/matrix-row-mean-keep-dims dZ)
-
                dW (M// (m/dot
                         dZ
                         (m/transpose A-prev)) m)
-               _ (println "dW:" (m/shape dW) dW)
                db (hnn-m/matrix-row-mean-keep-dims dZ)
-               _ (println "db:" (m/shape db) db)
                dA-prev (if (= l 1)
                          nil ; hack to avoid going back too far
                          (m/dot (m/transpose W) dZ))
-               _ (println "dA-prev:" (m/shape dA-prev) dA-prev)
                dZ-prev (if (= l 1)
                          nil ; hack to avoid going back too far
                          (M/* (m/emap dfn-prev Z-prev)
-                              dA-prev))
-               _ (println "dZ-prev:" (m/shape dZ-prev) dZ-prev)]
+                              dA-prev))]
+
+           ;; record gradients for this layer
            (assoc grads
                   :dW (conj (:dW grads) dW)
                   :db (conj (:db grads) db)
@@ -207,8 +188,9 @@
   (if (= 0 num-iterations)
     net-params
     (let [state (forward-prop X net-params)
-          A ((make-key :A (num-layers net-params)) state)
+          A (-> state :A last)
           cost (cost Y A)
+          _ (println "cost:" cost num-iterations "iterations to go")
           grads (back-prop X Y state net-params)
           new-net-params (update-net-params net-params
                                             grads
