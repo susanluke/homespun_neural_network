@@ -244,7 +244,3 @@
           Y [[0 1]]
           grad-diff (gradient-test net-params X Y)]
       (is (> max-dist-ratio grad-diff)))))
-
-
-
-;; TODO need to check the functions above and implement grad-check

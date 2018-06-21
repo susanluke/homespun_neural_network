@@ -120,6 +120,14 @@
                 (M/* Y (m/log A))
                 (M/* (M/- 1 Y) (m/log (M/- 1 A))))))))
 
+(defn accuracy
+  [Y A]
+  (let [A*  (m/emap #(if (> % 0.5) 1 0) A)
+        res (m/emap = Y A*)
+        m   (second (m/shape Y))
+        num-correct (count (filter true? (first res)))]
+    (float (/ (* num-correct 100) m))))
+
 ;; TODO: Not using this function?  Get rid? Or put initial dJ/dA val in
 ;; backprop?
 (defn cost-grad
@@ -139,6 +147,7 @@
   (let [layers (num-layers net-params)
         m (-> Y m/shape second)
         A-l (last (:A state))
+        dA-l (cost-grad Y A-l)
         dZ-l (M/- A-l Y)]
     (loop [l (dec layers)
            ;; use lists so conj adds to the head
@@ -154,8 +163,6 @@
         (recur
          (dec l)
          (let [;; retrieve relevant parameters
-               _ (println "---")
-               _ (println "[BP]LAYER " l)
                dZ     (first (:dZ grads))      ; size (n[l],   m)
                W      (nth (:W net-params) l)  ; size (n[l],   n[l-1])
                A-prev (nth (:A state) (dec l)) ; size (n[l-1], m)
@@ -183,16 +190,29 @@
                   :dA (conj (:dA grads) dA-prev)
                   :dZ (conj (:dZ grads) dZ-prev))))))))
 
-(defn neural-network
+(defn train-neural-network
   [X Y net-params learning-rate num-iterations]
   (if (= 0 num-iterations)
-    net-params
+    (do
+      (let [final-cost (cost Y (last (:A (forward-prop X net-params))))]
+        (println "FINAL cost:" final-cost))
+      net-params)
     (let [state (forward-prop X net-params)
           A (-> state :A last)
           cost (cost Y A)
-          _ (println "cost:" cost num-iterations "iterations to go")
-          grads (back-prop X Y state net-params)
+          _ (when (= 0 (mod num-iterations 100))
+              (println "cost:" cost num-iterations
+                       "iterations to go, accuracy: " (accuracy Y A)))
+          grads (back-prop X Y net-params state)
           new-net-params (update-net-params net-params
                                             grads
                                             learning-rate)]
-      (recur X Y net-params learning-rate num-iterations))))
+      (recur X Y new-net-params learning-rate (dec num-iterations)))))
+
+(defn predict
+  "Given data X (shape n,m) and a network, predicts whether
+  each of the m cases is true or false"
+  [X net-params]
+  (let [state (forward-prop X net-params)
+        activations (-> state :A last)]
+    (m/emap (partial < 0.5) activations)))
