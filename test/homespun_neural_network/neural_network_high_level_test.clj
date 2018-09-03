@@ -5,7 +5,8 @@
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as sgen]
             [clojure.test.check.generators :as tg]
-            [homespun-neural-network.neural-network :as sut]))
+            [homespun-neural-network.neural-network :as sut]
+            [homespun-neural-network.neural-network-test :as nnt]))
 
 ;; TODO - no actual testing here..
 (deftest train-neural-network-test
@@ -71,22 +72,34 @@
                           :W [nil [[0.55 -0.455]]],
                           :b [nil [[-0.01]]]}
               _ (println "initial net params" net-params)
-              data (data->x-y (sgen/sample data-gen 256))
+              data (data->x-y (sgen/sample data-gen 128))
               X (first data)
               Y (second data)
               _ (println "X:" (m/shape X))
               _ (println "Y:" (m/shape Y))
-              learning-rate 1e-2
-              num-iterations 3000
+              learning-rate 1
+              num-iterations 10000
               new-net-params (sut/train-neural-network X Y
                                                        net-params
                                                        learning-rate
-                                                       num-iterations)]
+                                                       num-iterations)
+              grad-check-res (nnt/gradient-test new-net-params X Y)
+              w1 (first (nth (:W new-net-params) 1))
+              w11 (first w1)
+              w12 (second w1)
+              b1 (ffirst (nth (:b new-net-params) 1))
+              ]
+          (println "grad check res:" grad-check-res)
           (println "new-net-params" new-net-params)
+          (println "ratios:" (/ w11 b1) (/ w12 b1))
           (is true))))
 
 (comment
   "
+  Add * regularization
+      * batch processing
+      * momentum
+      * softmax / configurable final activation fn and cost fn
   0.8x1 + 0.05 >= x2
 
   0.8x1 + 0.3x2 -0.2 > 0.5

@@ -163,12 +163,12 @@
         (recur
          (dec l)
          (let [;; retrieve relevant parameters
-               dZ     (first (:dZ grads))      ; size (n[l],   m)
-               W      (nth (:W net-params) l)  ; size (n[l],   n[l-1])
-               A-prev (nth (:A state) (dec l)) ; size (n[l-1], m)
-               Z-prev (nth (:Z state) (dec l)) ; size (n[l-1], m)
+               dZ          (first (:dZ grads))      ; size (n[l],   m)
+               W           (nth (:W net-params) l)  ; size (n[l],   n[l-1])
+               A-prev      (nth (:A state) (dec l)) ; size (n[l-1], m)
+               Z-prev      (nth (:Z state) (dec l)) ; size (n[l-1], m)
                fn-key-prev (nth (:fns net-params) (dec l))
-               dfn-prev (get-in activation-fns [fn-key-prev :dfn])
+               dfn-prev    (get-in activation-fns [fn-key-prev :dfn])
 
                ;; perform differential calculations
                dW (M// (m/dot
@@ -194,8 +194,11 @@
   [X Y net-params learning-rate num-iterations]
   (if (= 0 num-iterations)
     (do
-      (let [final-cost (cost Y (last (:A (forward-prop X net-params))))]
-        (println "FINAL cost:" final-cost))
+      (let [A (last (:A (forward-prop X net-params)))
+            final-cost (cost Y A)
+            final-acc (accuracy Y A)]
+        (println "FINAL cost:" final-cost
+                 "FINAL accuary:" final-acc))
       net-params)
     (let [state (forward-prop X net-params)
           A (-> state :A last)
