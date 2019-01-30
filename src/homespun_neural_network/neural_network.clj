@@ -198,7 +198,7 @@
             final-cost (cost Y A)
             final-acc (accuracy Y A)]
         (println "FINAL cost:" final-cost
-                 "FINAL accuary:" final-acc))
+                 "FINAL accuracy:" final-acc))
       net-params)
     (let [state (forward-prop X net-params)
           A (-> state :A last)
