@@ -31,13 +31,16 @@
                                                                 num-iterations)]
                    (println "new-net-params" new-net-params)))))
 
-(defn my-simple-function1 [x1 x2]
-  (if (>= (+ (* 0.8 x1) 0.05) x2)
-    1 0))
+#_(defn my-simple-function1 [x1 x2]
+    (if (>= (+ (* 0.8 x1) 0.05) x2)
+      1 0))
 
+(def actual-w11 0.55)
+(def actual-w12 -0.455)
+(def actual-b1 -0.01)
 
 (defn raw-fn [x1 x2]
-  (+ (* 0.55 x1) (* -0.455 x2) -0.01))
+  (+ (* actual-w11 x1) (* actual-w12 x2) actual-b1))
 
 (defn my-simple-function [x1 x2]
   (if (>= (raw-fn x1 x2) 0)
@@ -65,20 +68,23 @@
         y (m/reshape  (map second data) [1 m])]
     [x y]))
 
+;; Use the same data every time for reproducibility
+(defonce data (data->x-y (sgen/sample data-gen 512)))
+
 (deftest train-perceptron-test
   (time (let [net-params (sut/init-net-params [2 1] [:identity :sigmoid])
               net-params {:layer-sizes [2 1],
                           :fns [:identity :sigmoid],
-                          :W [nil [[0.55 -0.455]]],
+                          :W [nil [[0.1 0]]],
                           :b [nil [[-0.01]]]}
               _ (println "initial net params" net-params)
-              data (data->x-y (sgen/sample data-gen 128))
+              ;; data (data->x-y (sgen/sample data-gen 128))
               X (first data)
               Y (second data)
               _ (println "X:" (m/shape X))
               _ (println "Y:" (m/shape Y))
-              learning-rate 1
-              num-iterations 10000
+              learning-rate 1e-6
+              num-iterations 1000
               new-net-params (sut/train-neural-network X Y
                                                        net-params
                                                        learning-rate
@@ -92,6 +98,7 @@
           (println "grad check res:" grad-check-res)
           (println "new-net-params" new-net-params)
           (println "ratios:" (/ w11 b1) (/ w12 b1))
+          (println "expected ratios:" (/ actual-w11 actual-b1) (/ actual-w12 actual-b1))
           (is true))))
 
 (comment
